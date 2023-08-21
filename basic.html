@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screen Recording with Live Feedback</title>
+</head>
+<body>
+    <button id="startRecording">Start Recording</button>
+    <button id="stopRecording">Stop Recording</button>
+    <canvas id="liveCanvas"></canvas>
+
+    <script>
+        let mediaRecorder;
+        let mediaSource;
+        let recordedChunks = [];
+        let playbackIndex = 0;
+
+        const startRecordingButton = document.getElementById('startRecording');
+        const stopRecordingButton = document.getElementById('stopRecording');
+        const liveCanvas = document.getElementById('liveCanvas');
+        const canvasContext = liveCanvas.getContext('2d');
+
+        startRecordingButton.addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+
+                mediaSource = new MediaSource();
+                recordedChunks = [];
+
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.start();
+
+                mediaRecorder.onstop = () => {
+                    const recordedBlob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const recordedUrl = URL.createObjectURL(recordedBlob);
+                    const videoElement = document.createElement('video');
+                    videoElement.src = recordedUrl;
+                    videoElement.controls = true;
+                    document.body.appendChild(videoElement);
+                };
+
+                mediaSource.addEventListener('sourceopen', () => {
+                    const sourceBuffer = mediaSource.addSourceBuffer('video/webm; codecs="vp8"');
+                    sourceBuffer.addEventListener('updateend', () => {
+                        if (!sourceBuffer.updating && mediaSource.readyState === 'open') {
+                            mediaSource.endOfStream();
+                        }
+                    });
+                    playSegments(sourceBuffer);
+                });
+
+                // Append the media source to the body
+                document.body.appendChild(mediaSource);
+
+            } catch (error) {
+                console.error('Error accessing screen capture:', error);
+            }
+        });
+
+        stopRecordingButton.addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+        });
+
+        function playSegments(sourceBuffer) {
+            if (playbackIndex >= recordedChunks.length) {
+                return;
+            }
+
+            const chunk = recordedChunks[playbackIndex];
+            playbackIndex++;
+
+            sourceBuffer.appendBuffer(chunk);
+        }
+    </script>
+</body>
+</html>
